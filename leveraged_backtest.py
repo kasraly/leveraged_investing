@@ -62,6 +62,10 @@ tqqq = process_yahoo_csv("TQQQ.csv")
 tyd = process_yahoo_csv("TYD.csv")
 ty30 = process_yahoo_csv("TY30.csv").dropna()
 
+xic = process_yahoo_csv("XIC.TO.csv")
+xiu = process_yahoo_csv("XIU.TO.csv")
+hxu = process_yahoo_csv("HXU.TO.csv")
+
 spy = process_yahoo_csv("spy.csv")
 tmf = process_yahoo_csv("TMF.csv")
 upro = process_yahoo_csv("UPRO.csv")
@@ -140,7 +144,7 @@ print('mean', ratio.mean())
 def assetAllocBacktest(assets_data_all, start_date, end_date, asset_alloc=None, rebal_days=1, rebal_abs=0.02, rebal_rel=0.1, start_balance=1.0, commission=10, bidAskSpread=0.001):
 
     rebal_count = 0    
-    asset_alloc = rebal_3x(0.0)
+    asset_alloc = rebal(0.0)
     if asset_alloc is None:
         asset_alloc = [1.0 / len(assets_data_all)]*len(assets_data_all)
     asset_alloc = np.array(asset_alloc)
@@ -174,7 +178,7 @@ def assetAllocBacktest(assets_data_all, start_date, end_date, asset_alloc=None, 
         drop = (total_high - total_asset) / total_high
         sp500 = asset_data[1].loc[idx]
         sp500Drop = max(0.0, (1 - sp500['Close']/sp500['52WeekHigh']))
-        asset_alloc = rebal_3x(sp500Drop)
+        asset_alloc = rebal(sp500Drop)
         if drop > max_drop:
             max_drop = drop
 
@@ -199,6 +203,7 @@ def assetAllocBacktest(assets_data_all, start_date, end_date, asset_alloc=None, 
             total_fees += fees
             for asset, alloc in zip(asset_data, asset_alloc):
                 asset.loc[idx, 'Volume'] = max(0, (total_asset * alloc / asset.loc[idx, 'Close']))
+            # print(["%.3f"%item for item in [val / total_asset for val in assets_value]], ["%.3f"%item for item in asset_alloc], "%.3f"%sp500Drop)
         else:
             for asset in asset_data:
                 asset.loc[idx, 'Volume'] = asset.loc[idx_prev, 'Volume']
@@ -220,30 +225,65 @@ def analyze(val):
     return cagr, sharpe
 
 # %%
+def rebal_2x(drop):
+    # return np.array([0.0, 1.0])
+
+    x2_x1 = max(0.0, min(1.0, (1.0-0.5*drop)/(1.0-2*drop + 3.0 * (1-drop))))
+    x2_x1 = 0.25
+    x2_x1 = max(0.0, min(0.8, (drop)/(1.0-drop)))
+
+    x2 = x2_x1
+    x1 = 1 - x2
+
+    return np.array([x2, x1])
+
 def rebal_3x(drop):
-    # return np.array([0.0, 1.0, 0.0])
+    # return np.array([0.0, 1.0, 0.0, 0.0])
     # return np.array([0.4, 0.3, 0.3])
     # return np.array([0.5, 0.0, 0.5])
-    x3_x0 = min(0.8, (1.0)/(1.0+2/3 + 0.5*drop - 2*drop))
-    # x3_x0 = min(0.8, (1.0)/(1.0+3.2/4 + 0.0*drop - 2*drop))
-    x3_x1 = min(0.7, (1.0)/((1.0+4.0/4.0) * (1 - drop)))
-    # x3_x0 = min(0.85, (1.0-drop)/(1.0+3.0/4.0 - 3*drop))
-    # x3_x1 = 0.57
+
+    x3_x0 = min(1.0, (1.0)/(max(0.1, 1.0 + 2.0/3.0 * (1+1.0*drop) - 2.0*drop)))
+    x3_x1 = min(0.7, (1.0)/(max(0.1, 1.0 + 1.0 * (1-drop) - 1.0*drop)))
+
+    # x3_x0 = min(1.0, (1.0-drop)/(max(0.1, 1.0-drop + 2.0/3.0 * (1+0.6*drop) - 2.0*drop)))
+    # x3_x1 = min(0.7, (1.0-drop)/(max(0.1, 1.0-drop + 1.0 * (1-drop))))
+
+    x3_x0 = min(1.0, (1.0-drop)/(max(0.1, 1.0-drop + 2.0/3.0 * (1+1.0*drop) - 2.0*drop)))
+    x3_x1 = 0.5
 
     x3 = 1/(1+(1/x3_x1-1)+(1/x3_x0-1))
     x1 = (1/x3_x1-1)*x3
     x0 = (1/x3_x0-1)*x3
-    return np.array([x3, x1, x0/2, x0/2])
 
+    # x3_x0 = min(1.0, (1.0-drop)/(1.0*(1-3*drop) + 2.0/3.0 * (1 + 0.6*drop) ))
+    # x1_total = max(0.2, min(1.0, 3.0*(1-1.0*drop) / (3.0*(1-drop) + max(0.0, 5.0*((1-3*drop)*0.6 + (1+0.5*drop)*(0.4))))))
+    # # # x1_total = 3.0 / (3.0 + 5.0)
+    # # # x3_x0 = min(1.0, (1.0)/(max(0.1, 1.0 + 2.0/3.0 * (1 + 0.5*drop) - 3*drop)))
+
+    # x3 = (1.0 - x1_total) * x3_x0
+    # x1 = x1_total
+    # x0 = 1.0 - x3 - x1
+
+    return np.array([x3, x1, x0/2.0, x0/2.0])
+
+def rebal_3x_new(drop):
+    x3_x0 = min(0.9, (1.0*(1-drop))/(1.0 + 2.0/3.0 * (1 + 0.5*drop) - 3*drop))
+    x1_total = min(1.0, 3.0*(1-drop) / (3.0*(1-drop) + max(0.0, 5.0*((1-3*drop)*x3_x0 + (1+0.5*drop)*(1-x3_x0)))))
+
+    x3 = (1.0 - x1_total) * x3_x0
+    x1 = x1_total
+    x0 = 1.0 - x3 - x1
+    return np.array([x3, x1, x0/2.0, x0/2.0])
 # %%
+rebal = rebal_2x
 start = datetime.datetime(2013, 2, 1)
 end = datetime.datetime(2019, 2, 1)
-start = datetime.datetime(2012, 7, 1)
-# start = datetime.datetime(2010, 1, 1)
-end = datetime.datetime(2020, 7, 14)
+# start = datetime.datetime(2017, 7, 1)
+start = datetime.datetime(2005, 1, 1)
+end = datetime.datetime(2021, 12, 14)
 
-portfolio, max_drop, rebal_count, fees = assetAllocBacktest([upro, spy, edv, tmf],
-    start_date=start, end_date=end, rebal_days=0, rebal_abs=0.05, rebal_rel=0.0001,
+portfolio, max_drop, rebal_count, fees = assetAllocBacktest([hxu, xiu],
+    start_date=start, end_date=end, rebal_days=0, rebal_abs=0.1, rebal_rel=0.01,
     start_balance=150000.0)
 # result, max_drop = assetAllocBacktest([vfinx])
 cagr, sharpe = analyze(portfolio)
